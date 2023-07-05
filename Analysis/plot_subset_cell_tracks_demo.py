@@ -1,6 +1,5 @@
 """
 Demonstrates ploting cell tracks on radar reflectivity snapshots for a single radar domain.
-
 >python plot_subset_cell_tracks_demo.py -s STARTDATE -e ENDDATE -c CONFIG.yml --radar_lat LAT --radar_lon LON
 Optional arguments:
 -p 0 (serial), 1 (parallel)
@@ -36,6 +35,8 @@ import warnings
 warnings.filterwarnings("ignore")
 from pyflextrkr.ft_utilities import load_config
 from pyflextrkr.ft_utilities import load_config, subset_files_timerange
+from pyflextrkr.steiner_func import expand_conv_core_nosort
+import glob
 
 #-----------------------------------------------------------------------
 def parse_cmd_args():
@@ -157,7 +158,6 @@ def calc_latlon(lon1, lat1, dist, angle):
 def get_track_stats(trackstats_file, start_datetime, end_datetime, dt_thres):
     """
     Subset tracks statistics data within start/end datetime
-
     Args:
         trackstats_file: string
             Track statistics file name.
@@ -220,7 +220,6 @@ def get_track_stats(trackstats_file, start_datetime, end_datetime, dt_thres):
 def plot_map(pixel_dict, plot_info, map_info, track_dict):
     """
     Plotting function.
-
     Args:
         pixel_dict: dictionary
             Dictionary containing pixel-level variables
@@ -230,7 +229,6 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
             Dictionary containing mapping variables
         track_dict: dictionary
             Dictionary containing tracking variables
-
     Returns:
         fig: object
             Figure object.
@@ -242,10 +240,21 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
     yy = pixel_dict['latitude']
     dbz_comp = pixel_dict['dbz_comp']
     conv_mask = pixel_dict['conv_mask']
-    tn_perim = pixel_dict['tn_perim']
-    lon_tn = pixel_dict['lon_tn']
-    lat_tn = pixel_dict['lat_tn']
-    tracknumbers = pixel_dict['tracknumber_unique']
+    cell_base = pixel_dict['cell_base']
+    Tv = pixel_dict['tv']
+    tn_perim_lo = pixel_dict['tn_perim_lo']
+    tn_perim_hi = pixel_dict['tn_perim_hi']
+    tn_perim    = pixel_dict['tn_perim']
+    lon_tn_lo = pixel_dict['lon_tn_lo']
+    lon_tn_hi = pixel_dict['lon_tn_hi']
+    lon_tn    = pixel_dict['lon_tn']
+    lat_tn_lo = pixel_dict['lat_tn_lo']
+    lat_tn_hi = pixel_dict['lat_tn_hi']
+    lat_tn    = pixel_dict['lat_tn']
+    tn = pixel_dict['tn']
+    tracknumbers_lo = pixel_dict['tracknumber_unique_lo']
+    tracknumbers_hi = pixel_dict['tracknumber_unique_hi']
+    tracknumbers    = pixel_dict['tracknumber_unique']
     # Get track data from dictionary
     ntracks = track_dict['ntracks']
     lifetime = track_dict['lifetime']
@@ -287,10 +296,20 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
     
     # Set up map projection
     proj = ccrs.PlateCarree()
+    
+    # Take mean value of perimeter Tv and fill the cell in.
+    # tn_tv = np.zeros_like(tn_perim)
+    # for itrack in np.unique(tn_perim)[1:]:
+    #     tn_tv[tn == itrack] = np.mean(Tv[tn_perim == itrack])
+        
+    # Now we need to dynamically adjust the perimeter values
+    tn_tv = np.zeros(tn_perim.shape)
+    for itrack in np.unique(tn_perim)[1:]:
+        tn_tv[tn == itrack] = np.mean(Tv[tn_perim == itrack])
 
     # Set up figure
     mpl.rcParams['font.size'] = fontsize
-    mpl.rcParams['font.family'] = 'Helvetica'
+    mpl.rcParams['font.family'] = 'Roboto'
     fig = plt.figure(figsize=figsize, dpi=300, facecolor='w')
     gs = gridspec.GridSpec(1,2, height_ratios=[1], width_ratios=[1,0.03])
     gs.update(wspace=0.05, hspace=0.05, left=0.1, right=0.9, top=0.92, bottom=0.08)
@@ -298,7 +317,7 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
     cax1 = plt.subplot(gs[1])
 
     ax1.set_extent(map_extent, crs=proj)
-    ax1.set_aspect('auto', adjustable=None)
+    ax1.set_aspect('equal', adjustable=None)
     gl = ax1.gridlines(crs=proj, draw_labels=True, linestyle='--', linewidth=0.)
     gl.right_labels = False
     gl.top_labels = False
@@ -313,12 +332,28 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
     # Plot reflectivity
     cmap = plt.get_cmap(cmaps)
     norm_ref = mpl.colors.BoundaryNorm(levels, ncolors=cmap.N, clip=True)
-    dbz_comp = np.ma.masked_where(dbz_comp < min(levels), dbz_comp)
-    cf1 = ax1.pcolormesh(xx, yy, dbz_comp, norm=norm_ref, cmap=cmap, transform=proj, zorder=2)
+    # dbz_comp = np.ma.masked_where(dbz_comp < min(levels), dbz_comp) # EJ Replace this
+    # cf1 = ax1.pcolormesh(xx, yy, dbz_comp, norm=norm_ref, cmap=cmap, transform=proj, zorder=2)
+    tn_tv = np.ma.masked_where(tn_tv == 0, tn_tv) 
+    cf1 = ax1.pcolormesh(xx, yy, tn_tv, cmap='Reds',vmin = tn_tv.min(),vmax = tn_tv.max(), transform=proj, zorder=2)
+    
     # Overplot cell tracknumber perimeters
+    
+    red_cmap = mpl.colors.ListedColormap(['red'])
+    blu_cmap = mpl.colors.ListedColormap(['blue'])
+    blk_cmap = mpl.colors.ListedColormap(['black'])
+    
     Tn = np.ma.masked_where(tn_perim == 0, tn_perim)
     Tn[Tn > 0] = 10
-    tn1 = ax1.pcolormesh(xx, yy, Tn, cmap='gray', transform=proj, zorder=3)
+    tn3 = ax1.pcolormesh(xx, yy, Tn, cmap=blk_cmap, transform=proj, zorder=3)
+    
+    Tn_lo = np.ma.masked_where(tn_perim_lo == 0, tn_perim_lo)
+    Tn_lo[Tn_lo > 0] = 10
+    tn1 = ax1.pcolormesh(xx, yy, Tn_lo, cmap=blu_cmap, transform=proj, zorder=3)
+    
+    Tn_hi = np.ma.masked_where(tn_perim_hi == 0, tn_perim_hi)
+    Tn_hi[Tn_hi > 0] = 10
+    tn2 = ax1.pcolormesh(xx, yy, Tn_hi, cmap=red_cmap, transform=proj, zorder=3)
 
     # Plot track centroids and paths
     marker_style_s = dict(edgecolor='k', linestyle='-', marker='o')
@@ -359,11 +394,23 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
                     size_c = 0
                 size_vals = np.repeat(size_c, idur_cut)
                 size_vals[0] = size_c * 2   # Make CI symbol size larger
-                cc = ax1.plot(cell_lon.values[itrack,idx_cut], cell_lat.values[itrack,idx_cut], lw=lw_c, ls='-', color='k', transform=proj, zorder=3)
-                cl = ax1.scatter(cell_lon.values[itrack,idx_cut], cell_lat.values[itrack,idx_cut], s=size_vals, c=color_vals, 
-                                 norm=norm_lifetime, cmap=cmap_lifetime, transform=proj, zorder=4, **marker_style)
+#                 cc = ax1.plot(cell_lon.values[itrack,idx_cut], cell_lat.values[itrack,idx_cut], lw=lw_c, ls='-', color='k', transform=proj, zorder=3)
+#                 cl = ax1.scatter(cell_lon.values[itrack,idx_cut], cell_lat.values[itrack,idx_cut], s=size_vals, c=color_vals, 
+#                                  norm=norm_lifetime, cmap=cmap_lifetime, transform=proj, zorder=4, **marker_style)
     # Overplot cell tracknumbers at current frame
-    for ii in range(0, len(lon_tn)):
+    for ii in range(0, len(lon_tn_lo)):
+        if (lon_tn_lo[ii] > map_extent[0]) & (lon_tn_lo[ii] < map_extent[1]) & \
+            (lat_tn_lo[ii] > map_extent[2]) & (lat_tn_lo[ii] < map_extent[3]):
+            ax1.text(lon_tn_lo[ii]+0.02, lat_tn_lo[ii]+0.02, f'{tracknumbers_lo[ii]:.0f}', color='k', size=fontsize*0.8, 
+                    weight='bold', ha='left', va='center', transform=proj, zorder=4)
+    
+    for ii in range(0, len(lon_tn_hi)):
+        if (lon_tn_hi[ii] > map_extent[0]) & (lon_tn_hi[ii] < map_extent[1]) & \
+            (lat_tn_hi[ii] > map_extent[2]) & (lat_tn_hi[ii] < map_extent[3]):
+            ax1.text(lon_tn_hi[ii]+0.02, lat_tn_hi[ii]+0.02, f'{tracknumbers_hi[ii]:.0f}', color='k', size=fontsize*0.8, 
+                    weight='bold', ha='left', va='center', transform=proj, zorder=4)
+                    
+    for ii in range(1, len(lon_tn)):
         if (lon_tn[ii] > map_extent[0]) & (lon_tn[ii] < map_extent[1]) & \
             (lat_tn[ii] > map_extent[2]) & (lat_tn[ii] < map_extent[3]):
             ax1.text(lon_tn[ii]+0.02, lat_tn[ii]+0.02, f'{tracknumbers[ii]:.0f}', color='k', size=fontsize*0.8, 
@@ -382,7 +429,8 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
         lon2, lat2 = calc_latlon(radar_lon, radar_lat, 200, azimuths[ii])
         ax1.plot([radar_lon,lon2], [radar_lat,lat2], color='k', lw=0.4, transform=ccrs.Geodetic(), zorder=5)
     # Reflectivity colorbar
-    cb1 = plt.colorbar(cf1, cax=cax1, label=cblabels, ticks=cbticks, extend='both')
+#     cb1 = plt.colorbar(cf1, cax=cax1, label=cblabels, ticks=cbticks, extend='both')
+    cb1 = plt.colorbar(cf1, cax=cax1, extend='both')
     ax1.set_title(timestr)
 
     # Thread-safe figure output
@@ -393,10 +441,9 @@ def plot_map(pixel_dict, plot_info, map_info, track_dict):
     return fig
 
 #-----------------------------------------------------------------------
-def work_for_time_loop(datafile, track_dict, map_info, plot_info):
+def work_for_time_loop(datafile, tfile, track_dict, map_info, plot_info, weak_strong):
     """
     Process data for a single frame and make the plot.
-
     Args:
         datafile: string
             Pixel-level data filename
@@ -406,7 +453,8 @@ def work_for_time_loop(datafile, track_dict, map_info, plot_info):
             Dictionary containing mapping variables
         plot_info: dictionary
             Dictionary containing plotting variables
-
+        weak_strong: dictionary
+            Dictionary containing weak/strong cell ids.
     Returns:
         1.
     """
@@ -418,7 +466,17 @@ def work_for_time_loop(datafile, track_dict, map_info, plot_info):
     # Read pixel-level data
     ds = xr.open_dataset(datafile)
     pixel_bt = ds.time.data
-
+    
+    # Read temperature file
+    dst = xr.open_dataset(tfile)
+    Tv = dst['tv'][0,25,:,:]
+    nx = dst.sizes['west_east']
+    ny = dst.sizes['south_north']
+    ratio = 1/5
+    xcoord_out = np.arange(0, nx*ratio, 1)
+    ycoord_out = np.arange(0, ny*ratio, 1)
+    iTv = Tv.interp(west_east=xcoord_out, south_north=ycoord_out, method='linear', assume_sorted=True, kwargs={"fill_value": "extrapolate"} ).data
+    
     # Get map extent from data
     if map_extent is None:
         lonmin = ds['longitude'].min().item()
@@ -451,7 +509,7 @@ def work_for_time_loop(datafile, track_dict, map_info, plot_info):
             yy_sub = mask.where(mask == True, drop=True).lat.data
             lon_sub = ds['longitude'].where(mask == True, drop=True).squeeze()
             lat_sub = ds['latitude'].where(mask == True, drop=True).squeeze()
-            dbz_comp = ds['dbz_comp'].where(mask == True, drop=True).squeeze()
+            dbz_comp = ds['dbz_comp'].where(mask == True, drop=True).squeeze() # EJ
             convmask_sub = ds['conv_mask'].where(mask == True, drop=True).squeeze()
             tracknumber_sub = ds['tracknumber'].where(mask == True, drop=True).squeeze()
         else:
@@ -459,19 +517,75 @@ def work_for_time_loop(datafile, track_dict, map_info, plot_info):
             yy_sub = ds['lat'].data
             lon_sub = ds['longitude'].data.squeeze()
             lat_sub = ds['latitude'].data.squeeze()
-            dbz_comp = ds['dbz_comp'].squeeze()
+            dbz_comp = ds['dbz_comp'].squeeze() # EJ
             convmask_sub = ds['conv_mask'].squeeze()
             tracknumber_sub = ds['tracknumber'].squeeze()
-
+        
+        
+        
+        radii_expand_post = config["radii_expand_post"]
+        dx = config["dx"]
+        dy = config["dy"]
+        
+#         import pdb
+#         pdb.set_trace()
+        
+        tracknumber_tmp = tracknumber_sub.fillna(0)
+        tmp, _ = expand_conv_core_nosort(tracknumber_tmp.data, radii_expand_post, dx, dy, min_corenpix=0)
+        tracknumber_sub = xr.DataArray(tmp, coords=tracknumber_sub.coords, dims=tracknumber_sub.dims)
+        
+#         tmp, _ = expand_conv_core_nosort(convmask_sub.data, [1,2,3,4,5], 500, 500, min_corenpix=0)
+#         convmask_sub = xr.DataArray(tmp, coords=convmask_sub.coords, dims=convmask_sub.dims)
+        
+        # EJ        
+        iLo = weak_strong['iweak']+1
+        iHi = weak_strong['istrong']+1
+        mask_lo = np.isin(tracknumber_sub,iLo)
+        mask_hi = np.isin(tracknumber_sub,iHi)
+        tracknumber_sub_lo = tracknumber_sub.where(mask_lo)
+        tracknumber_sub_hi = tracknumber_sub.where(mask_hi)
+        
         # Get object perimeters
-        tn_perim = label_perimeter(tracknumber_sub.data, dilationstructure)
+        tn_perim_lo = label_perimeter(tracknumber_sub_lo.data, dilationstructure)
+        tn_perim_hi = label_perimeter(tracknumber_sub_hi.data, dilationstructure)
+        tn_perim    = label_perimeter(tracknumber_sub.data, dilationstructure)
+        
+        # Find average Tv for perimeter, then fill in each cell
+#         fname = '/gpfs/wolf/atm131/proj-shared/enochjo/20190129_eda09_tracks/stats/stats_3d_w_20190129.1500_20190129.1800.nc'
+#         sx1 = xr.open_mfdataset(fname,combine='nested')
+#         CoreArea_up = sx1['CoreArea_up'].load().data
+#         updr_base = np.zeros((685,720,35)) # rename later to core_base
+# 
+#         print('Calculating Updraft Base')
+#         for itime in np.arange(0,720):
+#             for itracks in np.arange(0,685):
+#                 for icore in np.arange(0,35):
+#                     vprof = np.where( np.isnan(  CoreArea_up[itracks,itime,:,icore] )==False )[0]
+#                     if len(vprof) !=0:
+#                         updr_base[itracks,itime,icore] = int(vprof[0])
+#         updr_base = updr_base.astype(int)
+#         
+#         print('Calculating Cell Base')
+        cell_base = np.zeros((685,720))
+#         for itime in np.arange(0,720):
+#             for itrack in np.arange(0,685):
+#                 ind = updr_base[itrack,itime,:]>0
+#                 if len(ind) !=0:
+#                     cell_base[itrack,itime] = np.median(updr_base[itrack,itime,ind])
+#             
+#         cell_base = cell_base.astype(int)
+        
 
         # Apply tracknumber to conv_mask
-        tnconv = tracknumber_sub.where(convmask_sub > 0).data
+        tnconv_lo = tracknumber_sub_lo.where(convmask_sub > 0).data
+        tnconv_hi = tracknumber_sub_hi.where(convmask_sub > 0).data
+        tnconv    = tracknumber_sub.where(convmask_sub > 0).data
 
         # Calculates cell center locations
-        lon_tn, lat_tn, xx_tn, yy_tn, tnconv_unique = calc_cell_center(tnconv, lon_sub, lat_sub, xx_sub, yy_sub)
-
+        lon_tn_lo, lat_tn_lo, xx_tn, yy_tn, tnconv_unique_lo = calc_cell_center(tnconv_lo, lon_sub, lat_sub, xx_sub, yy_sub)
+        lon_tn_hi, lat_tn_hi, xx_tn, yy_tn, tnconv_unique_hi = calc_cell_center(tnconv_hi, lon_sub, lat_sub, xx_sub, yy_sub)
+        lon_tn, lat_tn, xx_tn, yy_tn, tnconv_unique          = calc_cell_center(tnconv, lon_sub, lat_sub, xx_sub, yy_sub)
+        
         # titles = [timestr]
         timestr = ds['time'].squeeze().dt.strftime("%Y-%m-%d %H:%M:%S UTC").data
         fignametimestr = ds['time'].squeeze().dt.strftime("%Y%m%d_%H%M%S").data.item()
@@ -482,12 +596,22 @@ def work_for_time_loop(datafile, track_dict, map_info, plot_info):
             'pixel_bt': pixel_bt,
             'longitude': lon_sub, 
             'latitude': lat_sub, 
-            'dbz_comp': dbz_comp, 
+            'dbz_comp': dbz_comp,
+            'tv': iTv, 
             'tn': tracknumber_sub,
+            'cell_base': cell_base,
             'conv_mask': convmask_sub,
+            'tn_perim_lo': tn_perim_lo,
+            'tn_perim_hi': tn_perim_hi,
             'tn_perim': tn_perim, 
+            'lon_tn_lo': lon_tn_lo,
+            'lon_tn_hi': lon_tn_hi,
             'lon_tn': lon_tn, 
+            'lat_tn_lo': lat_tn_lo,
+            'lat_tn_hi': lat_tn_hi, 
             'lat_tn': lat_tn, 
+            'tracknumber_unique_lo': tnconv_unique_lo,
+            'tracknumber_unique_hi': tnconv_unique_hi,
             'tracknumber_unique': tnconv_unique,
         }
         plot_info['timestr'] = timestr
@@ -609,12 +733,40 @@ if __name__ == "__main__":
 
     # Get track stats data
     track_dict = get_track_stats(trackstats_file, start_datetime, end_datetime, dt_thres)
+    
+    # Get subset information (EJ)
+    dss   = xr.open_dataset(trackstats_file)
+    split = dss['start_split_tracknumber']
+    merge = dss['end_merge_tracknumber']
+    track_duration = dss['track_duration']
+    start_btime    = dss['start_basetime']
+    cell_meanlon = dss['cell_meanlon'].mean(dim='times')
+    
+    sub = np.where((track_duration >= 21)\
+    & (start_btime!=np.datetime64('2019-01-29T15:00:15.000000000')) \
+    & (cell_meanlon>-64.9) & (np.isnan(split)) & (np.isnan(merge))  )[0]
+    
+#     sub   = np.where((track_duration >= 21) & (track_duration <= 41) \
+#     & (cell_meanlon>-64.9) & (np.isnan(split)) & (np.isnan(merge)) \
+#     & (start_btime!=np.datetime64('2019-01-29T15:00:15.000000000')) )[0]
+    
+    maxETH_10dbz = dss['maxETH_10dbz'].isel(tracks=sub).max(dim='times')
+    pct   = maxETH_10dbz.quantile([0.333,0.666])
+    iLo   = np.where(maxETH_10dbz.data<=pct.data[0])[0]
+    iHi   = np.where(maxETH_10dbz.data>=pct.data[1])[0]
+    
+    weak_strong = {'iweak' : sub[iLo],'istrong' : sub[iHi]}
+    
+    # Import temperature information (EJ)
+    dir1 = '/gpfs/wolf/atm131/proj-shared/enochjo/20190129_eda09_interp/'
+    dir2 = 'corlasso.cldhamsl.2019012900eda09d4.base.M1.m1.'
+    tfiles = sorted(glob.glob(dir1+dir2+'*.nc'))[1:]
 
     # Serial option
     if run_parallel == 0:
         for ifile in range(len(datafiles)):
             print(datafiles[ifile])
-            result = work_for_time_loop(datafiles[ifile], track_dict, map_info, plot_info)
+            result = work_for_time_loop(datafiles[ifile], tfiles[ifile], track_dict, map_info, plot_info, weak_strong)
 
     # Parallel option
     elif run_parallel == 1:
@@ -627,7 +779,7 @@ if __name__ == "__main__":
         results = []
         for ifile in range(len(datafiles)):
             print(datafiles[ifile])
-            result = dask.delayed(work_for_time_loop)(datafiles[ifile], track_dict, map_info, plot_info)
+            result = dask.delayed(work_for_time_loop)(datafiles[ifile], tfiles[ifile], track_dict, map_info, plot_info, weak_strong)
             results.append(result)
 
         # Trigger dask computation

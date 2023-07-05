@@ -427,6 +427,66 @@ def expand_conv_core(score, radii_expand, dx, dy, min_corenpix=1):
     return score_expand, score_sorted
 
 
+def expand_conv_core_nosort(score, radii_expand, dx, dy, min_corenpix=1):
+    """
+    Expand convective cores outward to a set of specified radii sequentially.
+    
+    Parameters:
+    ===========
+    score: ndarray
+        Convetive core array (2D array)
+    radii_expand: ndarray
+        Radii values to expand
+    min_corenpix: int, optional
+        Minimum number of pixels to label a core (default 1)
+
+    Returns:
+    ===========
+    score_expand: ndarray <int>
+        Expanded convetive core, numbered and sorted by size, same size as score
+    score_sorted: ndarray <int>
+        Convective core array, numbered and sorted by size, same size as score
+    """
+    # Sort and renumber the cores by size
+    corenumber_unique = np.unique(score)
+    ncores = len(corenumber_unique)
+    score_sorted = np.copy(score)
+
+    # Initialize expanded core array
+    score_expand = np.copy(score_sorted)
+
+    # Check if a convective core exists
+    if (ncores > 0):
+
+        # Loop over each radius value
+        for iradius in radii_expand:
+
+            # Loop over each core
+            for ic in corenumber_unique:
+
+                # Create a binary mask for the current cell
+                coremap = np.zeros(score_sorted.shape, dtype=int)
+                coremap[score_sorted == ic] = 1
+
+                # Make a mask for dilatable region (this gets updated every iteration)
+                mask_dilatable = (score_expand == 0)
+
+                # Convert radius from [m] to number of grid points
+                conv_rad_gridx = int(iradius * 1000 / dx)
+                conv_rad_gridy = int(iradius * 1000 / dy)
+
+                # Create a structure for dilation
+                xgrd, ygrd = np.ogrid[-conv_rad_gridx:conv_rad_gridx+1, -conv_rad_gridy:conv_rad_gridy+1]
+                # strc = xgrd*xgrd + ygrd*ygrd <= conv_rad_gridx*conv_rad_gridy
+                strc = xgrd*xgrd + ygrd*ygrd <= (iradius*1000/dx) * (iradius*1000/dy)
+
+                # Dilate the core, mask with dilatable area, and assign with the core number
+                coremap_dilate = ndimage.binary_dilation(coremap, strc, mask=mask_dilatable)
+                score_expand[coremap_dilate == 1] = ic
+
+    return score_expand, score_sorted
+    
+
 def steiner_classification(
         types_steiner,
         refl,

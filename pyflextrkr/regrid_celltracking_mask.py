@@ -7,6 +7,8 @@ import xarray as xr
 import dask
 from dask.distributed import wait
 from pyflextrkr.ft_utilities import subset_files_timerange
+from pyflextrkr.steiner_func import expand_conv_core_nosort
+from scipy.ndimage import label
 
 def regrid_celltracking_mask(config):
     """
@@ -45,10 +47,10 @@ def regrid_celltracking_mask(config):
     for ifile in in_files:
         # Serial
         if run_parallel == 0:
-            result = regrid_file(ifile, in_basename, out_dir, out_basename)
+            result = regrid_file(ifile, in_basename, out_dir, out_basename, config)
         # Parallel
         elif run_parallel >= 1:
-            result = dask.delayed(regrid_file)(ifile, in_basename, out_dir, out_basename)
+            result = dask.delayed(regrid_file)(ifile, in_basename, out_dir, out_basename, config)
             results.append(result)
         else:
             sys.exit('Valid parallelization flag not provided')
@@ -62,7 +64,7 @@ def regrid_celltracking_mask(config):
     return
 
 
-def regrid_file(in_filename, in_basename, out_dir, out_basename):
+def regrid_file(in_filename, in_basename, out_dir, out_basename, config):
     """
     Regrid pixel level masks for a given input file.
 
@@ -111,10 +113,45 @@ def regrid_file(in_filename, in_basename, out_dir, out_basename):
     dbz_comp = ds['dbz_comp']
     dbz_lowlevel = ds['dbz_lowlevel']
     echotop10 = ds['echotop10']
-
+    
+    # EJ added option to expand convective core mask after tracking (for use in statistical analysis)
+    radii_expand_post = config["radii_expand_post"]
+    dx = config["dx"]
+    dy = config["dy"]
+    
+    tmap_coarse, core_sorted = expand_conv_core_nosort(tracknumber.data[0,:,:], radii_expand_post, dx, dy, min_corenpix=0)
+    da_tmap_coarse = xr.DataArray(tmap_coarse[np.newaxis, :], coords=tracknumber.coords, dims=tracknumber.dims)
+    
+    # Identifying individual cells in conv_core (which is binary)
+    # with the same cellid as tracknumber
+    core_label,_ = label(conv_core)
+    core_label_mod = np.zeros_like(core_label)
+    corenumber_unique = np.unique(core_label)
+    # Indexing from second value as 0 corresponds to background
+    for core in corenumber_unique[1:]:
+        ind = np.where(core_label == core)
+        cellind = tracknumber.data[ind[0][0],ind[1][0],ind[2][0]]
+        core_label_mod[ind] = cellind
+    
+    # Converting to dask array
+    da_core_label = xr.DataArray(core_label_mod, coords=conv_core.coords, dims=conv_core.dims)
+    
+#     import pdb; pdb.set_trace()
+#     from matplotlib import pyplot as plt
+#     plt.clf
+#     f1 = plt.figure(figsize=(5, 5))
+#     pm = plt.pcolormesh(core_label_mod[0,:,:])
+# #     pm = plt.pcolormesh(conv_mask[0,:,:])
+#     plt.colorbar(pm)
+#     plt.savefig('/ccsopen/home/enochjo/test.png')
+    
     # Remap to the full coordinate
     # Mask variables
     tracknumber_out = tracknumber.interp(
+        lon=xcoord_out, lat=ycoord_out, method='nearest', 
+        assume_sorted=True, kwargs={"fill_value": "extrapolate"},
+    ).data.astype(int)
+    tracknumber_expand = da_tmap_coarse.interp(
         lon=xcoord_out, lat=ycoord_out, method='nearest', 
         assume_sorted=True, kwargs={"fill_value": "extrapolate"},
     ).data.astype(int)
@@ -139,6 +176,10 @@ def regrid_file(in_filename, in_basename, out_dir, out_basename):
         assume_sorted=True, kwargs={"fill_value": "extrapolate"},
     ).data.astype(int)
     conv_core_out = conv_core.interp(
+        lon=xcoord_out, lat=ycoord_out, method='nearest', 
+        assume_sorted=True, kwargs={"fill_value": "extrapolate"},
+    ).data.astype(int)
+    conv_core_label_out = da_core_label.interp(
         lon=xcoord_out, lat=ycoord_out, method='nearest', 
         assume_sorted=True, kwargs={"fill_value": "extrapolate"},
     ).data.astype(int)
@@ -175,8 +216,10 @@ def regrid_file(in_filename, in_basename, out_dir, out_basename):
         "dbz_comp": (["time", "lat", "lon"], dbz_comp_out, dbz_comp.attrs),
         "dbz_lowlevel": (["time", "lat", "lon"], dbz_lowlevel_out, dbz_lowlevel.attrs),
         "conv_core": (["time", "lat", "lon"], conv_core_out, conv_core.attrs),
+        "conv_core_label": (["time", "lat", "lon"], conv_core_label_out, conv_core.attrs),
         "conv_mask": (["time", "lat", "lon"], conv_mask_out, conv_mask.attrs),
         "tracknumber": (["time", "lat", "lon"], tracknumber_out, tracknumber.attrs),
+        "tracknumber_expand": (["time", "lat", "lon"], tracknumber_expand, tracknumber.attrs),
         # "tracknumber_cmask": (["time", "lat", "lon"], tracknumber_cmask_out, tracknumber_cmask.attrs),
         "track_status": (["time", "lat", "lon"], track_status_out, track_status.attrs),
         "feature_number": (["time", "lat", "lon"], feature_number_out, feature_number.attrs),
