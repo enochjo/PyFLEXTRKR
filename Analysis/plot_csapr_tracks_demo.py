@@ -317,15 +317,16 @@ if __name__ == "__main__":
 
     start_datetime = sys.argv[1]
     end_datetime = sys.argv[2]
-    run_parallel = int(sys.argv[3])
+    # run_parallel = int(sys.argv[3])
     config_file = sys.argv[4]
 
     # start_datetime = '2019-01-25T17'
     # end_datetime = '2019-01-26T06'
-    # run_parallel = 0
+    run_parallel = 0
 
     # Track stats file
     config = load_config(config_file)
+    import pdb; pdb.set_trace()
     stats_path = config["stats_outpath"]
     pixeltracking_path = config["pixeltracking_outpath"]
     trackstats_filebase = config["trackstats_filebase"]

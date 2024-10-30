@@ -136,14 +136,14 @@ def regrid_file(in_filename, in_basename, out_dir, out_basename, config):
     # Converting to dask array
     da_core_label = xr.DataArray(core_label_mod, coords=conv_core.coords, dims=conv_core.dims)
     
-#     import pdb; pdb.set_trace()
-#     from matplotlib import pyplot as plt
-#     plt.clf
-#     f1 = plt.figure(figsize=(5, 5))
-#     pm = plt.pcolormesh(core_label_mod[0,:,:])
-# #     pm = plt.pcolormesh(conv_mask[0,:,:])
-#     plt.colorbar(pm)
-#     plt.savefig('/ccsopen/home/enochjo/test.png')
+    import pdb; pdb.set_trace()
+    from matplotlib import pyplot as plt
+    plt.clf
+    f1 = plt.figure(figsize=(5, 5))
+    pm = plt.pcolormesh(core_label_mod[0,:,:])
+#     pm = plt.pcolormesh(conv_mask[0,:,:])
+    plt.colorbar(pm)
+    plt.savefig('/ccsopen/home/enochjo/test.png')
     
     # Remap to the full coordinate
     # Mask variables

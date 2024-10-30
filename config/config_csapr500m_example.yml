@@ -16,33 +16,33 @@ run_mapfeature: True
 
 # Parallel processing set up
 # run_parallel: 1 (local cluster), 2 (Dask MPI)
-run_parallel: 1
+run_parallel: 0
 nprocesses: 4  # Number of processors to use if run_parallel=1
 dask_tmp_dir: '/tmp'  # Dask temporary directory if run_parallel=1
 timeout: 360  # [seconds] Dask timeout limit
 
 # Start/end date and time
-startdate: '20190125.1200'
-enddate: '20190126.0000'
+startdate: '20181015.0000'
+enddate: '20190303.0000'
 
 # Specify tracking input data date/time string format
 # This is the preprocessed file that contains Tb & rainrate
 # E.g., databasename20181101.011503.nc --> yyyymodd.hhmmss
 # E.g., databasename2018-11-01_01:15:00 --> yyyy-mo-dd_hh:mm:ss
-time_format: 'yyyymodd.hhmmss'
-databasename: taranis_corcsapr2cfrppiqcM1.c1.
+time_format: 'yyyymodd.hhmm'
+databasename: 'taranis_corcsapr2cfrppiqcM1.c1.'
 
 # Input files directory
-clouddata_path: 'INPUT_DIR/'
+clouddata_path: '/gpfs/wolf2/arm/atm131/proj-shared/zfeng/cacti/csapr/taranis_corcsapr2cfrppiqcM1_gridded.c1/'
 # Working directory for the tracking data
-root_path: 'TRACK_DIR/'
+root_path: '/gpfs/wolf2/arm/atm131/proj-shared/zfeng/cacti/csapr/taranis_corcsapr2cfrppiqcM1_celltracking.c1/'
 # Working sub-directory names
 tracking_path_name: 'tracking'
 stats_path_name: 'stats'
 pixel_path_name: 'celltracking'
 
 # Terrain file
-terrain_file: 'INPUT_DIR/CSAPR2_Taranis_Gridded_500m.Terrain_RangeMask.nc'
+terrain_file: '/gpfs/wolf2/arm/atm131/proj-shared/zfeng/cacti/csapr/corgridded_terrain.c0/CSAPR2_Taranis_Gridded_500m.Terrain_RangeMask.nc'
 # Elevation variable to use in terrain file
 elev_varname: 'hgt'
 # Range mask variable to use in terrain file
@@ -125,7 +125,8 @@ input_source: 'csapr_cacti'
 # Specify data structure
 datatimeresolution: 0.25     # hours
 pixel_radius: 0.5      # km
-ref_varname: 'dbz_comp'
+# ref_varname: 'dbz_comp'
+ref_varname: 'reflectivity'
 
 # Tracking parameters
 timegap: 0.5           # hour

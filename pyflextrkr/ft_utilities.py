@@ -40,6 +40,7 @@ def load_config(config_file):
     startdate = config["startdate"]
     enddate = config["enddate"]
     # Set up tracking output file locations
+#     import pdb; pdb.set_trace()
     tracking_outpath = config["root_path"] + "/" + config["tracking_path_name"] + "/"
     stats_outpath = config["root_path"] + "/" + config["stats_path_name"] + "/"
     pixeltracking_outpath = config["root_path"] + "/" + config["pixel_path_name"] + "/" + \
@@ -164,8 +165,10 @@ def get_basetime_from_filename(
         # If hour, minute, second is not in time_format, assume 0
         hour = ifile[hh_idx:hh_idx+2] if (hh_idx is not None) else '00'
         minute = ifile[mm_idx:mm_idx+2] if (mm_idx is not None) else '00'
-        second = ifile[ss_idx:ss_idx+2] if (ss_idx is not None) else '00'
-
+#         second = ifile[ss_idx:ss_idx+2] if (ss_idx is not None) else '00'
+        second = '00'
+#         import pdb; pdb.set_trace()
+        
         # Check month, day, hour, minute, second valid values
         if (0 <= int(month) <= 12) & (0 <= int(day) <= 31) & \
            (0 <= int(hour) <= 23) & (0 <= int(minute) <= 59) & (0 <= int(second) <= 59):
